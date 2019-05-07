@@ -5,5 +5,5 @@ import (
 )
 
 func handleApiVersionCheck(resp http.ResponseWriter, req *http.Request) {
-	redirectToSource(resp, req)
+	return
 }

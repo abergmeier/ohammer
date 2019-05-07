@@ -2,23 +2,28 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
-
-	"github.com/gorilla/mux"
 )
 
 var (
-	source = flag.String("source", os.Getenv("SOURCE"), "Source registry to proxy")
+	selector = flag.String("selector", os.Getenv("SELECTOR"), "Selector to extract origin registry")
+	version = flag.Bool("version", false, "Prints version information")
 )
 
 func init() {
 	flag.Parse()
+	if *selector == "" {
+		defaultSelector := ``
+		selector = &defaultSelector
+	}
 }
 
 func redirectToSource(resp http.ResponseWriter, req *http.Request) {
 	redirUrl := req.URL
-	redirUrl.Host = *source
+
+	redirUrl.Host = "foobar.de"
 	http.Redirect(resp, req, redirUrl.String(), http.StatusTemporaryRedirect)
 }
 
@@ -34,24 +39,19 @@ func pullLayerHandler(resp http.ResponseWriter, req *http.Request) {
 
 func main() {
 
-	r := mux.NewRouter()
+	if *version {
+		fmt.Printf("O'Hammer Version v%v\n", "0.0.1")
+		return
+	}
 
-	err := r.HandleFunc("/v2", handleApiVersionCheck).GetError()
+	s, err := NewServer(":8080")
+
 	if err != nil {
 		panic(err)
 	}
 
-	err = r.HandleFunc("/v2/{name}/manifests/{reference}", pullImageManifestHandler).GetError()
+	err = s.ListenAndServe()
 	if err != nil {
-		panic(err)
-	}
-
-	err = r.HandleFunc("/v2/{name}/blobs/{digest}", pullLayerHandler).GetError()
-	if err != nil {
-		panic(err)
-	}
-
-	if err := http.ListenAndServe(":8080", nil); err != nil {
 		panic(err)
 	}
 }
