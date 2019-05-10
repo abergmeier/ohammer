@@ -16,13 +16,13 @@ RUN cd /tmp/src/ && \
 
 COPY . /tmp/src
 
-# Compile
-RUN cd /tmp/src && \
-    go build
-
 # Test
 RUN cd /tmp/src && \
     go test
+
+# Compile
+RUN cd /tmp/src && \
+    go build
 
 FROM alpine
 
