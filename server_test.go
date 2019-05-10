@@ -17,15 +17,20 @@ func testLocationMatch(t *testing.T, resp *http.Response, redirLoc string) {
 	}
 
 	if loc[0] != redirLoc {
-		t.Fatalf("Uncorrect redirect to %v <-> %v", loc[0], redirLoc)
+		t.Fatalf(`Incorrect redirect
+to       %v
+expected %v`, loc[0], redirLoc)
+	}
+}
+
+func testStatus(t *testing.T, resp *http.Response, status int) {
+	if resp.StatusCode != status {
+		t.Fatalf("Unexpected status code %v <-> %v", resp.StatusCode, status)
 	}
 }
 
 func testRedirect(t *testing.T, resp *http.Response, redirLoc string) {
-	if resp.StatusCode != http.StatusTemporaryRedirect {
-		t.Fatalf("Unexpected status code %v <-> %v", resp.StatusCode, http.StatusTemporaryRedirect)
-	}
-
+	testStatus(t, resp, http.StatusTemporaryRedirect)
 	testLocationMatch(t, resp, redirLoc)
 }
 
@@ -59,7 +64,7 @@ func TestPullImageManifestPatched(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	testRedirect(t, resp, "//gcr.io/v2/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516")
+	testStatus(t, resp, http.StatusOK)
 }
 
 func TestPullImageManifestUnpatched(t *testing.T) {
@@ -74,12 +79,10 @@ func TestPullImageManifestUnpatched(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	if resp.StatusCode != http.StatusTemporaryRedirect {
-		t.Fatalf("Unexpected status code %v", resp.StatusCode)
-	}
+	testRedirect(t, resp, "//foobar/v2/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516")
 }
 
-func TestExistanceImageManifest(t *testing.T) {
+func TestExistanceImageManifestPatched(t *testing.T) {
 	r, err := NewRouter()
 
 	if err != nil {
@@ -91,9 +94,20 @@ func TestExistanceImageManifest(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	if resp.StatusCode != http.StatusTemporaryRedirect {
-		t.Fatalf("Unexpected status code %v", resp.StatusCode)
-	}
+	testStatus(t, resp, http.StatusOK)
 }
 
-// gcr.io/spinnaker-marketplace/gate:1.2.1-20181108172516
+func TestExistanceImageManifestUnpatched(t *testing.T) {
+	r, err := NewRouter()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("HEAD", "/v2/spider/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	resp := w.Result()
+	testRedirect(t, resp, "//spider/v2/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516")
+}
