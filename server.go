@@ -35,6 +35,10 @@ func NewRouter() (*mux.Router, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/manifests/{reference}", proxyHeadManifestHandler).Methods("HEAD").GetError()
+	if err != nil {
+		return nil, err
+	}
 	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/blobs/{digest}", proxyGetBlobHandler).Methods("GET").GetError()
 	if err != nil {
 		return nil, err
@@ -56,31 +60,16 @@ func NewServer(addr string) (*http.Server, error) {
 	}, nil
 }
 
-func proxyGetManifestHandler(resp http.ResponseWriter, req *http.Request) {
+type target struct {
+	host string
+	path string
+	ref string
+}
 
-	redirUrl := req.URL
-
-	vars := mux.Vars(req)
-	host, ok := vars["originHost"]
-	if !ok {
-		resp.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	path, ok := vars["originPath"]
-	if !ok {
-		resp.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	ref, ok := vars["reference"]
-	if !ok {
-		resp.WriteHeader(http.StatusBadRequest)
-		return
-	}
+func findMatch(t *target) *match {
 
 	i := func() int {
-		dockerReg := []byte(fmt.Sprintf("%s/%s:%s", host, path, ref))
+		dockerReg := []byte(fmt.Sprintf("%s/%s:%s", t.host, t.path, t.ref))
 		for i, match := range matchers {
 			ok := match.reg.Find(dockerReg)
 			if ok != nil {
@@ -92,10 +81,77 @@ func proxyGetManifestHandler(resp http.ResponseWriter, req *http.Request) {
 	}()
 
 	if i == -1 {
-		redirUrl.Host = host
-		redirUrl.Path = fmt.Sprintf("/v2/%s/manifests/%s", path, ref)
+		return nil
+	}
 
-		http.Redirect(resp, req, redirUrl.String(), http.StatusTemporaryRedirect)
+	return &matchers[i]
+}
+
+func extractTarget(req *http.Request) *target {
+
+	vars := mux.Vars(req)
+	host, ok := vars["originHost"]
+	if !ok {
+		return nil
+	}
+
+	path, ok := vars["originPath"]
+	if !ok {
+		return nil
+	}
+
+	ref, ok := vars["reference"]
+	if !ok {
+		return nil
+	}
+
+	return &target{
+		host: host,
+		path: path,
+		ref:  ref,
+	}
+}
+
+func redirect(req *http.Request, resp http.ResponseWriter, t *target) {
+	redirURL := req.URL
+	redirURL.Host = t.host
+	redirURL.Path = fmt.Sprintf("/v2/%s/manifests/%s", t.path, t.ref)
+
+	http.Redirect(resp, req, redirURL.String(), http.StatusTemporaryRedirect)
+}
+
+func proxyGetManifestHandler(resp http.ResponseWriter, req *http.Request) {
+
+	t := extractTarget(req)
+
+	if t == nil {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	match := findMatch(t)
+	if match == nil {
+		// No match
+		redirect(req, resp, t)
+		return
+	}
+
+	resp.WriteHeader(http.StatusNotImplemented)
+}
+
+func proxyHeadManifestHandler(resp http.ResponseWriter, req *http.Request) {
+
+	t := extractTarget(req)
+
+	if t == nil {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	match := findMatch(t)
+	if match == nil {
+		// No match
+		redirect(req, resp, t)
 		return
 	}
 
