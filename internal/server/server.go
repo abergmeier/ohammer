@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"fmt"
@@ -8,12 +8,13 @@ import (
 	"github.com/otto-de/ohammer/internal/backing"
 	"github.com/otto-de/ohammer/internal/build"
 	"github.com/otto-de/ohammer/internal/config"
+	"github.com/otto-de/ohammer/internal"
 )
 
 func NewRouter() (*mux.Router, error) {
 	r := mux.NewRouter()
 
-	err := r.HandleFunc("/v2", handleApiVersionCheck).GetError()
+	err := r.HandleFunc("/v2", internal.HandleApiVersionCheck).GetError()
 	if err != nil {
 		return nil, err
 	}

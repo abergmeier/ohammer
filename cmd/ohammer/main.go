@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+
+	"github.com/otto-de/ohammer/internal/server"
 )
 
 var (
@@ -45,7 +47,7 @@ func main() {
 		return
 	}
 
-	s, err := NewServer(":8080", *repository)
+	s, err := server.NewServer(":8080", *repository)
 
 	if err != nil {
 		panic(err)
