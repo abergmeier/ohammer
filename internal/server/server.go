@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/otto-de/ohammer/internal"
 	"github.com/otto-de/ohammer/internal/backing"
 	"github.com/otto-de/ohammer/internal/build"
 	"github.com/otto-de/ohammer/internal/config"
-	"github.com/otto-de/ohammer/internal"
 )
 
 func NewRouter() (*mux.Router, error) {
