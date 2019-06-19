@@ -59,7 +59,7 @@ func TestPullImageManifestPatched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("GET", "/v2/gcr.io/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516", nil)
+	req := httptest.NewRequest("GET", "/v2/index.docker.io/golang/manifests/1.12", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -74,12 +74,12 @@ func TestPullImageManifestUnpatched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("GET", "/v2/foobar/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516", nil)
+	req := httptest.NewRequest("GET", "/v2/foobar/golang/manifests/1.12", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	testRedirect(t, resp, "//foobar/v2/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516")
+	testRedirect(t, resp, "//foobar/v2/golang/manifests/1.12")
 }
 
 func TestExistanceImageManifestPatched(t *testing.T) {
@@ -89,7 +89,7 @@ func TestExistanceImageManifestPatched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("HEAD", "/v2/gcr.io/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516", nil)
+	req := httptest.NewRequest("HEAD", "/v2/index.docker.io/golang/manifests/1.12", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -104,10 +104,10 @@ func TestExistanceImageManifestUnpatched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("HEAD", "/v2/spider/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516", nil)
+	req := httptest.NewRequest("HEAD", "/v2/spider/golang/manifests/1.12", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	testRedirect(t, resp, "//spider/v2/spinnaker-marketplace/gate/manifests/1.2.1-20181108172516")
+	testRedirect(t, resp, "//spider/v2/golang/manifests/1.12")
 }

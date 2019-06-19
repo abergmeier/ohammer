@@ -118,29 +118,31 @@ func proxyGetManifestHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if req.Method == "HEAD" {
-		resp.WriteHeader(http.StatusNotImplemented)
-		return
-	}
-
 	backingResponse, err := backing.Poll(req, "manifests", t)
 	if err != nil {
 		panic(err)
 	}
 
 	if backingResponse.StatusCode != http.StatusOK {
-		err := build.ApplyPatch(patch)
-		if err != nil {
-			panic(err)
+		switch backingResponse.StatusCode {
+		case http.StatusUnauthorized:
+			resp.WriteHeader(http.StatusUnauthorized)
+			return
 		}
-		// Recheck
-		backingResponse, err := backing.Poll(req, "manifests", t)
-		if err != nil {
-			panic(err)
-		}
-		if backingResponse.StatusCode != http.StatusOK {
 
-		}
+		panic(backingResponse.StatusCode)
+	}
+	err = build.ApplyPatch(patch)
+	if err != nil {
+		panic(err)
+	}
+	// Recheck
+	backingResponse, err = backing.Poll(req, "manifests", t)
+	if err != nil {
+		panic(err)
+	}
+	if backingResponse.StatusCode != http.StatusOK {
+		panic(backingResponse.Body)
 	}
 }
 
