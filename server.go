@@ -3,23 +3,11 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 
 	"github.com/gorilla/mux"
-)
-
-type match struct {
-	reg *regexp.Regexp
-	patch string
-}
-
-var (
-	matchers = []match {
-		match{
-			reg: regexp.MustCompile(`.*gcr\.io/spinnaker-marketplace/gate.*`),
-			patch: "mypatch",
-		},
-	}
+	"github.com/otto-de/ohammer/internal/backing"
+	"github.com/otto-de/ohammer/internal/build"
+	"github.com/otto-de/ohammer/internal/config"
 )
 
 func NewRouter() (*mux.Router, error) {
@@ -31,11 +19,10 @@ func NewRouter() (*mux.Router, error) {
 	}
 
 	sub := r.PathPrefix("/v2").Subrouter()
-	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/manifests/{reference}", proxyGetManifestHandler).Methods("GET").GetError()
+	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/manifests/{reference}", proxyGetManifestHandler).Methods("GET", "HEAD").GetError()
 	if err != nil {
 		return nil, err
 	}
-	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/manifests/{reference}", proxyHeadManifestHandler).Methods("HEAD").GetError()
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +34,7 @@ func NewRouter() (*mux.Router, error) {
 	return r, nil
 }
 
-func NewServer(addr string) (*http.Server, error) {
+func NewServer(addr string, repository string) (*http.Server, error) {
 
 	r, err := NewRouter()
 	if err != nil {
@@ -60,18 +47,12 @@ func NewServer(addr string) (*http.Server, error) {
 	}, nil
 }
 
-type target struct {
-	host string
-	path string
-	ref string
-}
-
-func findMatch(t *target) *match {
+func findMatch(t *config.Target) *config.Patch {
 
 	i := func() int {
-		dockerReg := []byte(fmt.Sprintf("%s/%s:%s", t.host, t.path, t.ref))
-		for i, match := range matchers {
-			ok := match.reg.Find(dockerReg)
+		dockerReg := []byte(fmt.Sprintf("%s/%s:%s", t.Host, t.Path, t.Ref))
+		for i, patch := range config.Patches {
+			ok := patch.Reg.Find(dockerReg)
 			if ok != nil {
 				return i
 			}
@@ -84,10 +65,10 @@ func findMatch(t *target) *match {
 		return nil
 	}
 
-	return &matchers[i]
+	return &config.Patches[i]
 }
 
-func extractTarget(req *http.Request) *target {
+func extractTarget(req *http.Request) *config.Target {
 
 	vars := mux.Vars(req)
 	host, ok := vars["originHost"]
@@ -105,17 +86,17 @@ func extractTarget(req *http.Request) *target {
 		return nil
 	}
 
-	return &target{
-		host: host,
-		path: path,
-		ref:  ref,
+	return &config.Target{
+		Host: host,
+		Path: path,
+		Ref:  ref,
 	}
 }
 
-func redirect(req *http.Request, resp http.ResponseWriter, t *target) {
+func redirectRequestToTarget(req *http.Request, resp http.ResponseWriter, sectionPath string, t *config.Target) {
 	redirURL := req.URL
-	redirURL.Host = t.host
-	redirURL.Path = fmt.Sprintf("/v2/%s/manifests/%s", t.path, t.ref)
+	redirURL.Host = t.Host
+	redirURL.Path = fmt.Sprintf("/v2/%s/%s/%s", t.Path, sectionPath, t.Ref)
 
 	http.Redirect(resp, req, redirURL.String(), http.StatusTemporaryRedirect)
 }
@@ -129,33 +110,37 @@ func proxyGetManifestHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	match := findMatch(t)
-	if match == nil {
+	patch := findMatch(t)
+	if patch == nil {
 		// No match
-		redirect(req, resp, t)
+		redirectRequestToTarget(req, resp, "manifests", t)
 		return
 	}
 
-	resp.WriteHeader(http.StatusNotImplemented)
-}
-
-func proxyHeadManifestHandler(resp http.ResponseWriter, req *http.Request) {
-
-	t := extractTarget(req)
-
-	if t == nil {
-		resp.WriteHeader(http.StatusBadRequest)
+	if req.Method == "HEAD" {
+		resp.WriteHeader(http.StatusNotImplemented)
 		return
 	}
 
-	match := findMatch(t)
-	if match == nil {
-		// No match
-		redirect(req, resp, t)
-		return
+	backingResponse, err := backing.Poll(req, "manifests", t)
+	if err != nil {
+		panic(err)
 	}
 
-	resp.WriteHeader(http.StatusNotImplemented)
+	if backingResponse.StatusCode != http.StatusOK {
+		err := build.ApplyPatch(patch)
+		if err != nil {
+			panic(err)
+		}
+		// Recheck
+		backingResponse, err := backing.Poll(req, "manifests", t)
+		if err != nil {
+			panic(err)
+		}
+		if backingResponse.StatusCode != http.StatusOK {
+
+		}
+	}
 }
 
 func proxyGetBlobHandler(resp http.ResponseWriter, req *http.Request) {

@@ -9,6 +9,7 @@ import (
 
 var (
 	selector = flag.String("selector", os.Getenv("SELECTOR"), "Selector to extract origin registry")
+	repository  = flag.String("repository", os.Getenv("REPOSITORY"), "")
 	version = flag.Bool("version", false, "Prints version information")
 )
 
@@ -44,7 +45,7 @@ func main() {
 		return
 	}
 
-	s, err := NewServer(":8080")
+	s, err := NewServer(":8080", *repository)
 
 	if err != nil {
 		panic(err)
