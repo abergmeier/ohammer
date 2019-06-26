@@ -16,11 +16,11 @@ var (
 	Patches = []Patch {
 		Patch{
 			Target: Target{
-				Host: "index.docker.io",
+				Host: "",
 				Path: "golang",
 				Ref:  "",
 			},
-			Reg: regexp.MustCompile(`.*index\.docker\.io/golang:.*`),
+			Reg: regexp.MustCompile(`docker.io/library/golang:.*`),
 			Content: `
 RUN chgrp -R 0 /go && \
     chmod -R g=u /go

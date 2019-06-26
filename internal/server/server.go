@@ -9,6 +9,8 @@ import (
 	"github.com/otto-de/ohammer/internal/backing"
 	"github.com/otto-de/ohammer/internal/build"
 	"github.com/otto-de/ohammer/internal/config"
+
+	"github.com/otto-de/ohammer/third_party/docker_distribution/reference"
 )
 
 func NewRouter() (*mux.Router, error) {
@@ -20,14 +22,14 @@ func NewRouter() (*mux.Router, error) {
 	}
 
 	sub := r.PathPrefix("/v2").Subrouter()
-	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/manifests/{reference}", proxyGetManifestHandler).Methods("GET", "HEAD").GetError()
+	err = sub.HandleFunc("/{origin:.*}/manifests/{reference}", proxyGetManifestHandler).Methods("GET", "HEAD").GetError()
 	if err != nil {
 		return nil, err
 	}
 	if err != nil {
 		return nil, err
 	}
-	err = sub.HandleFunc("/{originHost}/{originPath:.*?}/blobs/{digest}", proxyGetBlobHandler).Methods("GET").GetError()
+	err = sub.HandleFunc("/{origin}/blobs/{digest}", proxyGetBlobHandler).Methods("GET").GetError()
 	if err != nil {
 		return nil, err
 	}
@@ -72,26 +74,20 @@ func findMatch(t *config.Target) *config.Patch {
 func extractTarget(req *http.Request) *config.Target {
 
 	vars := mux.Vars(req)
-	host, ok := vars["originHost"]
+	orig, ok := vars["origin"]
 	if !ok {
 		return nil
 	}
 
-	path, ok := vars["originPath"]
+	t := &config.Target{}
+	t.Host, t.Path = reference.SplitDockerDomain(orig)
+
+	t.Ref, ok = vars["reference"]
 	if !ok {
 		return nil
 	}
 
-	ref, ok := vars["reference"]
-	if !ok {
-		return nil
-	}
-
-	return &config.Target{
-		Host: host,
-		Path: path,
-		Ref:  ref,
-	}
+	return t
 }
 
 func redirectRequestToTarget(req *http.Request, resp http.ResponseWriter, sectionPath string, t *config.Target) {
@@ -118,29 +114,38 @@ func proxyGetManifestHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	backingResponse, err := backing.Poll(req, "manifests", t)
+	b := backing.NewBacking()
+
+	backingResponse, err := b.Poll(req, "manifests", t)
 	if err != nil {
 		panic(err)
 	}
+
+	defer backingResponse.Body.Close()
 
 	if backingResponse.StatusCode != http.StatusOK {
 		switch backingResponse.StatusCode {
 		case http.StatusUnauthorized:
 			resp.WriteHeader(http.StatusUnauthorized)
 			return
+		case http.StatusNotFound:
+			resp.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		panic(backingResponse.StatusCode)
 	}
+
 	err = build.ApplyPatch(patch)
 	if err != nil {
 		panic(err)
 	}
 	// Recheck
-	backingResponse, err = backing.Poll(req, "manifests", t)
+	backingResponse, err = b.Poll(req, "manifests", t)
 	if err != nil {
 		panic(err)
 	}
+
 	if backingResponse.StatusCode != http.StatusOK {
 		panic(backingResponse.Body)
 	}

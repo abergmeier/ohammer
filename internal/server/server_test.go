@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+var (
+	patchedManifestPaths = []string{
+		"/v2/golang/manifests/1.12",
+		"/v2/index.docker.io/golang/manifests/1.12",
+		"/v2/index.docker.io/library/golang/manifests/1.12",
+		"/v2/docker.io/golang/manifests/1.12",
+		"/v2/docker.io/library/golang/manifests/1.12",
+	}
+)
+
 func testLocationMatch(t *testing.T, resp *http.Response, redirLoc string) {
 	loc, ok := resp.Header["Location"]
 	if !ok {
@@ -23,19 +33,19 @@ expected %v`, loc[0], redirLoc)
 	}
 }
 
-func testStatus(t *testing.T, resp *http.Response, status int) {
+func testStatus(t *testing.T, resp *http.Response, status int, id string) {
 	if resp.StatusCode != status {
-		t.Fatalf("Unexpected status code %v <-> %v", resp.StatusCode, status)
+		t.Errorf("Unexpected status code %v <-> %v for %s", resp.StatusCode, status, id)
 	}
 }
 
-func testRedirect(t *testing.T, resp *http.Response, redirLoc string) {
-	testStatus(t, resp, http.StatusTemporaryRedirect)
+func testRedirect(t *testing.T, resp *http.Response, redirLoc string, id string) {
+	testStatus(t, resp, http.StatusTemporaryRedirect, id)
 	testLocationMatch(t, resp, redirLoc)
 }
 
 func TestV2(t *testing.T) {
-
+	t.Parallel()
 	r, err := NewRouter()
 
 	if err != nil {
@@ -53,61 +63,71 @@ func TestV2(t *testing.T) {
 }
 
 func TestPullImageManifestPatched(t *testing.T) {
+	t.Parallel()
 	r, err := NewRouter()
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("GET", "/v2/index.docker.io/golang/manifests/1.12", nil)
-	w := httptest.NewRecorder()
+	for _, p := range patchedManifestPaths {
+		req := httptest.NewRequest("GET", p, nil)
+		w := httptest.NewRecorder()
 
-	r.ServeHTTP(w, req)
-	resp := w.Result()
-	testStatus(t, resp, http.StatusOK)
+		r.ServeHTTP(w, req)
+		resp := w.Result()
+		testStatus(t, resp, http.StatusOK, p)
+	}
 }
 
 func TestPullImageManifestUnpatched(t *testing.T) {
+	t.Parallel()
 	r, err := NewRouter()
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("GET", "/v2/foobar/golang/manifests/1.12", nil)
+	p := "/v2/foobar/manifests/1.12"
+	req := httptest.NewRequest("GET", p, nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	testRedirect(t, resp, "//foobar/v2/golang/manifests/1.12")
+	testRedirect(t, resp, "//docker.io/v2/library/foobar/manifests/1.12", p)
 }
 
 func TestExistanceImageManifestPatched(t *testing.T) {
+	t.Parallel()
 	r, err := NewRouter()
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("HEAD", "/v2/index.docker.io/golang/manifests/1.12", nil)
-	w := httptest.NewRecorder()
+	for _, p := range patchedManifestPaths {
+		req := httptest.NewRequest("HEAD", p, nil)
+		w := httptest.NewRecorder()
 
-	r.ServeHTTP(w, req)
-	resp := w.Result()
-	testStatus(t, resp, http.StatusOK)
+		r.ServeHTTP(w, req)
+		resp := w.Result()
+		testStatus(t, resp, http.StatusOK, p)
+	}
 }
 
 func TestExistanceImageManifestUnpatched(t *testing.T) {
+	t.Parallel()
 	r, err := NewRouter()
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("HEAD", "/v2/spider/golang/manifests/1.12", nil)
+	p := "/v2/spider/manifests/1.12"
+	req := httptest.NewRequest("HEAD", p, nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
-	testRedirect(t, resp, "//spider/v2/golang/manifests/1.12")
+	testRedirect(t, resp, "//docker.io/v2/library/spider/manifests/1.12", p)
 }
